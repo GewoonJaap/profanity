@@ -1,0 +1,19 @@
+{
+  "name": "profanity",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy --minify",
+    "cf-typegen": "wrangler types --env-interface CloudflareBindings",
+    "seed": "tsx scripts/seed/index.ts",
+    "seed:upload": "tsx scripts/seed/index.ts && wrangler vectorize insert profanity-index --file=profanity-vectors.json --upsert"
+  },
+  "dependencies": {
+    "hono": "^4.10.7"
+  },
+  "devDependencies": {
+    "wrangler": "^4.4.0",
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2"
+  }
+}
