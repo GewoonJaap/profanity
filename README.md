@@ -41,7 +41,14 @@ wrangler secret put UPLOAD_TOKEN
 ### 2. Create Vectorize index
 
 ```bash
+# Login to Cloudflare (if not already logged in)
+wrangler login
+
+# Create the Vectorize index
 wrangler vectorize create profanity-index --dimensions=384 --metric=cosine
+
+# Verify the index was created
+wrangler vectorize list
 ```
 
 ### 3. Seed the vector database
