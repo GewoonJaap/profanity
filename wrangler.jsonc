@@ -12,6 +12,8 @@
       "index_name": "profanity-index"
     }
   ]
+  // For production, set secrets using: wrangler secret put UPLOAD_TOKEN
+  // For local development, add UPLOAD_TOKEN to .dev.vars
   // "vars": {
   //   "MY_VAR": "my-variable"
   // },

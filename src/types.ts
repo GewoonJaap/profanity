@@ -19,6 +19,7 @@ export interface ProfanityCheckRequest {
 
 export interface Env {
   VECTORIZE: Vectorize;
+  UPLOAD_TOKEN?: string;
 }
 
 export interface VectorizeVector {

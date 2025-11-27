@@ -20,6 +20,24 @@ A profanity detector built with Hono, Cloudflare Workers and Vectorize.
 yarn install
 ```
 
+### 2. Configure environment
+
+Create a `.dev.vars` file for local development:
+
+```bash
+# Generate a secure token
+openssl rand -hex 32
+
+# Add to .dev.vars
+UPLOAD_TOKEN=your-generated-token-here
+```
+
+For production, set the secret:
+
+```bash
+wrangler secret put UPLOAD_TOKEN
+```
+
 ### 2. Create Vectorize index
 
 ```bash
@@ -28,26 +46,52 @@ wrangler vectorize create profanity-index --dimensions=384 --metric=cosine
 
 ### 3. Seed the vector database
 
-Generate and upload profanity vectors in one command:
+**Option A: Using Workers API (Recommended - No Duplicates)**
 
 ```bash
+# Terminal 1: Start main worker
+yarn dev
+
+# Terminal 2: Generate and upload (uses UPLOAD_TOKEN from .dev.vars)
 yarn seed:upload
 ```
 
-Or run separately:
+This uses the Workers API `upsert()` method via the `/api/admin/upload-vectors` endpoint which updates existing vectors instead of creating duplicates. The endpoint is protected by Bearer token authentication.
+
+**Option B: Using CLI (Creates Duplicates on Re-run)**
 
 ```bash
 # Generate vectors
 yarn seed
 
 # Upload to Vectorize
-wrangler vectorize insert profanity-index --file=profanity-vectors.json --upsert
+wrangler vectorize insert profanity-index --file=profanity-vectors.json
 ```
+
+**Note**: The CLI `insert` command creates duplicates on re-runs. For production, use Option A or delete and recreate the index between runs.
 
 ### 4. Start development server
 
 ```bash
 yarn dev
+```
+
+## Secrets & Environment Variables
+
+### Local Development (`.dev.vars`)
+
+```
+UPLOAD_TOKEN=your-secret-token-here
+```
+
+### Production (Cloudflare Secrets)
+
+```bash
+# Set upload token
+wrangler secret put UPLOAD_TOKEN
+
+# Set in GitHub Actions
+# Add UPLOAD_TOKEN to repository secrets
 ```
 
 ## API Usage
@@ -124,17 +168,18 @@ src/
 ├── vectorUtils.ts        # Vector embedding utilities
 ├── routes/
 │   └── profanity.ts      # Profanity detection endpoint
-└── services/
-    └── ProfanityService.ts  # Core detection logic
-
-scripts/
-└── seed/
-    ├── index.ts          # Main seeding script
-    ├── config.ts         # Configuration & sources
-    ├── types.ts          # Type definitions
-    ├── fetcher.ts        # Remote list fetching
-    ├── generator.ts      # Vector generation
-    └── logger.ts         # Logging utilities
+├── services/
+│   └── ProfanityService.ts  # Core detection logic
+└── scripts/
+    ├── seed/
+    │   ├── index.ts      # Main seeding script
+    │   ├── config.ts     # Configuration & sources
+    │   ├── types.ts      # Type definitions
+    │   ├── fetcher.ts    # Remote list fetching
+    │   ├── generator.ts  # Vector generation
+    │   └── logger.ts     # Logging utilities
+    └── upload/
+        └── index.ts      # Vector upload script
 ```
 
 ## Threshold Tuning
@@ -163,7 +208,7 @@ The `threshold` parameter determines detection strictness:
 
 - Current implementation uses a simple character-based embedding
 - For production, consider using a proper embedding model (e.g., OpenAI, Cohere)
-- Language sources can be extended in `scripts/seed/config.ts`
+- Language sources can be extended in `src/scripts/seed/config.ts`
 
 ## Type Generation
 

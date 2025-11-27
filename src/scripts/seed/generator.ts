@@ -2,7 +2,7 @@
  * Vector generation utilities
  */
 
-import { generateEmbedding } from '../../src/vectorUtils';
+import { generateEmbedding } from '../../vectorUtils';
 import type { VectorRecord, WordsByLanguage } from './types';
 
 /**

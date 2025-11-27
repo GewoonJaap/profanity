@@ -1,0 +1,6 @@
+# Local development environment variables
+# Copy this to .dev.vars and add your actual values
+
+# Upload endpoint authentication token
+# Generate a secure random token: openssl rand -hex 32
+UPLOAD_TOKEN=your-secret-token-here

@@ -4,9 +4,12 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy --minify",
+    "deploy:dry-run": "wrangler deploy --dry-run --outdir=dist",
+    "build": "wrangler deploy --dry-run --outdir=dist",
     "cf-typegen": "wrangler types --env-interface CloudflareBindings",
-    "seed": "tsx scripts/seed/index.ts",
-    "seed:upload": "tsx scripts/seed/index.ts && wrangler vectorize insert profanity-index --file=profanity-vectors.json --upsert"
+    "seed": "tsx src/scripts/seed/index.ts",
+    "upload": "tsx src/scripts/upload/index.ts",
+    "seed:upload": "tsx src/scripts/seed/index.ts && tsx src/scripts/upload/index.ts"
   },
   "dependencies": {
     "hono": "^4.10.7"
