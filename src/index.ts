@@ -8,7 +8,7 @@ const app = new Hono<{ Bindings: Env }>();
 
 // Add CORS middleware
 app.use('/api/*', cors({
-  origin: 'profanity.christmas-tree.app',
+  origin: '*',
 }));
 
 app.get('/', (c) => {
