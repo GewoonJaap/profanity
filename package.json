@@ -10,11 +10,13 @@
     "prepare-seed": "tsx helpers/prepare-seed-data.ts"
   },
   "dependencies": {
-    "hono": "^4.10.7"
+    "hono": "^4.10.7",
+    "langchain": "0.2.11",
+    "@langchain/textsplitters": "1.0.1"
   },
   "devDependencies": {
-    "wrangler": "^4.4.0",
     "@types/node": "^22.10.2",
-    "tsx": "^4.19.2"
+    "tsx": "^4.19.2",
+    "wrangler": "^4.4.0"
   }
 }

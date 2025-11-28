@@ -1,13 +1,21 @@
-import type { 
-  Env, 
-  ProfanityCheckResult, 
-  ProfanityMatch 
+import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
+import type {
+  Env,
+  ProfanityCheckResult,
+  ProfanityMatch,
+  VectorizeQueryResult
 } from '../types';
-import { 
-  generateEmbedding, 
-  tokenizeText, 
+import {
+  generateEmbedding,
+  tokenizeText,
   isProfaneMatch 
 } from '../vectorUtils';
+
+const semanticSplitter = new RecursiveCharacterTextSplitter({
+  chunkSize: 25,
+  separators: [' '],
+  chunkOverlap: 8,
+});
 
 export class ProfanityService {
   constructor(private env: Env) {}
@@ -18,35 +26,28 @@ export class ProfanityService {
   private normalizeText(text: string): string {
     let normalized = text.toLowerCase();
 
+    // Whitelist common words that might be flagged
+    const whitelist = ['black', 'swear'];
+    normalized = normalized
+      .split(/\s/)
+      .filter((word) => !whitelist.includes(word.toLowerCase()))
+      .join(' ');
+
     // Remove common obfuscation characters
     normalized = normalized
       .replace(/[*@#$%&]+/g, '') // Remove special chars used for obfuscation
       .replace(/[0-9]/g, (match) => {
         // Leet speak conversion
         const leetMap: Record<string, string> = {
-          '0': 'o',
-          '1': 'i',
-          '3': 'e',
-          '4': 'a',
-          '5': 's',
-          '7': 't',
-          '8': 'b',
+          '0': 'o', '1': 'i', '3': 'e', '4': 'a', '5': 's', '7': 't', '8': 'b',
         };
         return leetMap[match] || match;
       })
-      .replace(/(\w)\1+/g, '$1') // Remove repeated characters (e.g., "shiiit" -> "shit")
+      .replace(/(\w)\1+/g, '$1') // Remove repeated characters
       .replace(/\s+/g, ' ') // Normalize whitespace
       .trim();
 
     return normalized;
-  }
-
-  /**
-   * Check for zero-width characters and invisible Unicode tricks
-   */
-  private hasInvisibleCharacters(text: string): boolean {
-    const invisibleChars = /[\u200B-\u200D\uFEFF\u00A0]/g;
-    return invisibleChars.test(text);
   }
 
   /**
@@ -60,176 +61,115 @@ export class ProfanityService {
    * Generate variations of a word to catch obfuscation
    */
   private generateWordVariations(word: string): string[] {
-    const variations = [word];
+    const variations = new Set<string>([word]);
 
-    // Check word without spaces between characters (e.g., "s h i t" -> "shit")
     const withoutSpaces = word.replace(/\s/g, '');
-    if (withoutSpaces !== word) {
-      variations.push(withoutSpaces);
-    }
+    if (withoutSpaces !== word) variations.add(withoutSpaces);
 
-    // Check with common substitutions removed
     const withoutSubstitutions = word
       .replace(/[!|]/g, 'i')
       .replace(/\$/g, 's')
       .replace(/@/g, 'a')
       .replace(/\(/g, 'c');
-    
-    if (withoutSubstitutions !== word) {
-      variations.push(withoutSubstitutions);
-    }
+    if (withoutSubstitutions !== word) variations.add(withoutSubstitutions);
 
-    return [...new Set(variations)]; // Remove duplicates
+    return Array.from(variations);
+  }
+  
+  /**
+   * Generates embeddings for an array of text chunks in batches.
+   */
+  private async embedChunks(chunks: string[]): Promise<Map<string, number[]>> {
+    const embeddingsMap = new Map<string, number[]>();
+    const AI_BATCH_SIZE = 100;
+
+    for (let i = 0; i < chunks.length; i += AI_BATCH_SIZE) {
+      const batch = chunks.slice(i, i + AI_BATCH_SIZE);
+      const embeddingsResponse = await this.env.AI.run('@cf/baai/bge-small-en-v1.5', {
+        text: batch,
+      });
+
+      if (!embeddingsResponse.data) {
+        throw new Error('Failed to generate embeddings');
+      }
+
+      batch.forEach((chunk, j) => {
+        embeddingsMap.set(chunk, embeddingsResponse.data[j]);
+      });
+    }
+    return embeddingsMap;
   }
 
   /**
-   * Check text for profanity with advanced detection
+   * Check text for profanity with advanced detection and parallel processing
    */
   async checkProfanity(
     text: string,
-    threshold: number = 0.8
+    threshold: number = 0.86 // Adjusted based on competitor's code for better accuracy
   ): Promise<ProfanityCheckResult> {
-    // Remove invisible characters first
     const cleanedText = this.removeInvisibleCharacters(text);
-    
-    // Normalize to prevent circumvention
     const normalizedText = this.normalizeText(cleanedText);
-    
-    // Tokenize the normalized text
+
+    if (normalizedText.split(/\s/).length > 35 || normalizedText.length > 1000) {
+        return {
+            hasProfanity: false,
+            matches: [],
+            overallScore: 0,
+            text: 'Due to temporary cloudflare limits, a message can only be up to 35 words or 1000 characters.',
+        };
+    }
+
+    // --- 1. Collect all chunks to be checked ---
     const words = tokenizeText(normalizedText);
-    
-    if (words.length === 0) {
-      return {
-        hasProfanity: false,
-        matches: [],
-        overallScore: 0,
-        text: cleanedText,
-      };
-    }
+    const semanticChunks = await semanticSplitter.splitText(normalizedText);
 
-    const matches: ProfanityMatch[] = [];
-    const checkedWords = new Set<string>();
-
-    // Check each word and its variations
-    for (const word of words) {
-      if (word.length < 2) continue; // Skip very short words
-      if (checkedWords.has(word)) continue;
-      
-      checkedWords.add(word);
-      const variations = this.generateWordVariations(word);
-      
-      let bestMatch: { score: number; profanity: string } | null = null;
-
-      // Check all variations against vector store
-      for (const variation of variations) {
-        const embedding = await generateEmbedding(variation, this.env.AI);
-        
-        const results = await this.env.VECTORIZE.query(embedding, {
-          topK: 1,
-          returnValues: false,
-          returnMetadata: 'all',
-        });
-
-        if (results.matches && results.matches.length > 0) {
-          const topMatch = results.matches[0];
-          
-          if (!bestMatch || topMatch.score > bestMatch.score) {
-            bestMatch = {
-              score: topMatch.score,
-              profanity: topMatch.metadata?.word || topMatch.id,
-            };
-          }
+    const allChunks = new Set<string>();
+    words.forEach(word => {
+        if (word.length > 1) {
+            this.generateWordVariations(word).forEach(v => allChunks.add(v));
         }
-      }
+    });
+    semanticChunks.forEach(chunk => allChunks.add(chunk));
 
-      if (bestMatch) {
-        const isProfane = bestMatch.score >= threshold;
-        matches.push({
-          word,
-          matchScore: bestMatch.score,
-          matchedProfanity: bestMatch.profanity,
-          isProfane,
-        });
-      } else {
-        matches.push({
-          word,
-          matchScore: 0,
-          matchedProfanity: '',
-          isProfane: false,
-        });
-      }
+    const uniqueChunks = Array.from(allChunks);
+    if (uniqueChunks.length === 0) {
+      return { hasProfanity: false, matches: [], overallScore: 0, text: cleanedText };
     }
 
-    // Check for concatenated profanity (e.g., "youareshit")
-    const concatenatedMatches = await this.checkConcatenatedProfanity(
-      normalizedText,
-      threshold
-    );
-    matches.push(...concatenatedMatches);
+    // --- 2. Generate embeddings for all chunks in parallel ---
+    const embeddingsMap = await this.embedChunks(uniqueChunks);
 
-    // Calculate overall profanity score
-    const profaneMatches = matches.filter(m => m.isProfane);
-    const overallScore = matches.length > 0
-      ? profaneMatches.reduce((sum, m) => sum + m.matchScore, 0) / matches.length
-      : 0;
+    // --- 3. Query vector store for all chunks in parallel ---
+    const queryPromises = uniqueChunks.map(chunk => {
+      const embedding = embeddingsMap.get(chunk);
+      if (!embedding) return Promise.resolve(null);
+
+      return this.env.VECTORIZE.query(embedding, { topK: 1, returnMetadata: true })
+        .then(res => ({ chunk, results: res.matches[0] }));
+    });
+    
+    const queryResults = await Promise.all(queryPromises);
+
+    // --- 4. Process results ---
+    const profaneMatches: ProfanityMatch[] = [];
+    queryResults.forEach(result => {
+      if (result && result.results && isProfaneMatch(result.results, threshold)) {
+        profaneMatches.push({
+          word: result.chunk,
+          matchScore: result.results.score,
+          matchedProfanity: result.results.metadata?.word as string || 'unknown',
+          isProfane: true,
+        });
+      }
+    });
+
+    const overallScore = profaneMatches.reduce((sum, m) => sum + m.matchScore, 0) / (words.length || 1);
 
     return {
       hasProfanity: profaneMatches.length > 0,
-      matches,
+      matches: profaneMatches,
       overallScore,
       text: cleanedText,
     };
-  }
-
-  /**
-   * Check for profanity hidden in concatenated text
-   */
-  private async checkConcatenatedProfanity(
-    text: string,
-    threshold: number
-  ): Promise<ProfanityMatch[]> {
-    const matches: ProfanityMatch[] = [];
-    const cleanText = text.replace(/\s/g, ''); // Remove all spaces
-    
-    // Only check if text is reasonably long
-    if (cleanText.length < 4 || cleanText.length > 50) {
-      return matches;
-    }
-
-    // Check sliding windows of different sizes
-    for (let windowSize = 3; windowSize <= 8; windowSize++) {
-      for (let i = 0; i <= cleanText.length - windowSize; i++) {
-        const substring = cleanText.substring(i, i + windowSize);
-        const embedding = await generateEmbedding(substring, this.env.AI);
-        
-        const results = await this.env.VECTORIZE.query(embedding, {
-          topK: 1,
-          returnValues: false,
-          returnMetadata: 'all',
-        });
-
-        if (results.matches && results.matches.length > 0) {
-          const topMatch = results.matches[0];
-          
-          if (isProfaneMatch(topMatch, threshold)) {
-            // Check if we haven't already found this match
-            const isDuplicate = matches.some(
-              m => m.matchedProfanity === (topMatch.metadata?.word || topMatch.id)
-            );
-            
-            if (!isDuplicate) {
-              matches.push({
-                word: `[hidden: ${substring}]`,
-                matchScore: topMatch.score,
-                matchedProfanity: topMatch.metadata?.word || topMatch.id,
-                isProfane: true,
-              });
-            }
-          }
-        }
-      }
-    }
-
-    return matches;
   }
 }
