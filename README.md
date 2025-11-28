@@ -11,6 +11,7 @@ A profanity detector built with Hono, Cloudflare Workers and Vectorize.
 - ✅ Multi-language support (27 languages)
 - ✅ Advanced anti-circumvention detection
 - ✅ Cloudflare Workers for edge deployment
+- ✅ AI-powered embeddings using `@cf/baai/bge-small-en-v1.5`
 
 ## Setup
 
@@ -38,7 +39,7 @@ For production, set the secret:
 wrangler secret put UPLOAD_TOKEN
 ```
 
-### 2. Create Vectorize index
+### 3. Create Vectorize index
 
 ```bash
 # Login to Cloudflare (if not already logged in)
@@ -51,33 +52,32 @@ wrangler vectorize create profanity-index --dimensions=384 --metric=cosine
 wrangler vectorize list
 ```
 
-### 3. Seed the vector database
+### 4. Seed the vector database
 
-**Option A: Using Workers API (Recommended - No Duplicates)**
+The seeding process is now done via an API endpoint. To make it easier to gather the words and format the payload, you can use the `prepare-seed` helper script.
 
-```bash
-# Terminal 1: Start main worker
-yarn dev
+**Step 1: Prepare the seed data**
 
-# Terminal 2: Generate and upload (uses UPLOAD_TOKEN from .dev.vars)
-yarn seed:upload
-```
-
-This uses the Workers API `upsert()` method via the `/api/admin/upload-vectors` endpoint which updates existing vectors instead of creating duplicates. The endpoint is protected by Bearer token authentication.
-
-**Option B: Using CLI (Creates Duplicates on Re-run)**
+This will fetch all the words from the sources defined in `helpers/config.ts` and create a `seed-payload.json` file.
 
 ```bash
-# Generate vectors
-yarn seed
-
-# Upload to Vectorize
-wrangler vectorize insert profanity-index --file=profanity-vectors.json
+yarn prepare-seed
 ```
 
-**Note**: The CLI `insert` command creates duplicates on re-runs. For production, use Option A or delete and recreate the index between runs.
+**Step 2: Seed the database via API**
 
-### 4. Start development server
+This will send the `seed-payload.json` file to the seeding endpoint. Make sure your development server is running (`yarn dev`).
+
+```bash
+curl -X POST http://localhost:8787/api/admin/words \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_UPLOAD_TOKEN" \
+  --data-binary "@seed-payload.json"
+```
+
+Remember to replace `YOUR_UPLOAD_TOKEN` with the token from your `.dev.vars` file.
+
+### 5. Start development server
 
 ```bash
 yarn dev
@@ -103,7 +103,7 @@ wrangler secret put UPLOAD_TOKEN
 
 ## API Usage
 
-### POST /api/profanity/vector
+### `POST /api/profanity/vector`
 
 Check text for profanity.
 
@@ -119,7 +119,7 @@ Check text for profanity.
 - `text` (string, required): The text to check for profanity
 - `threshold` (number, optional): Match threshold (0-1). Default: 0.8
 
-**Response:**
+**Success Response (200):**
 ```json
 {
   "hasProfanity": true,
@@ -142,29 +142,32 @@ Check text for profanity.
 }
 ```
 
-**Response Fields:**
-- `hasProfanity`: Boolean - whether profanity was found
-- `matches`: Array - details per word
-  - `word`: The analyzed word
-  - `matchScore`: Similarity score (0-1)
-  - `matchedProfanity`: Closest profanity match
-  - `isProfane`: Whether this word is considered profane
-- `overallScore`: Average profanity score across all words
-- `text`: The original input text
+### `POST /api/admin/words`
 
-## Example Usage
+Seed the vector database with a list of words. Requires Bearer token authentication.
 
-```bash
-curl -X POST http://localhost:8787/api/profanity/vector \
-  -H "Content-Type: application/json" \
-  -d '{"text": "What the hell is this crap?"}'
+**Request Body:**
+```json
+{
+  "words": ["word1", "word2", "word3"]
+}
 ```
 
-## Deployment
-
-```bash
-yarn deploy
+**Success Response (200):**
+```json
+{
+  "message": "Successfully seeded 813 words.",
+  "count": 813
+}
 ```
+
+## CORS Policy
+
+Cross-Origin Resource Sharing (CORS) is configured to allow requests from the following origin:
+
+- `profanity.christmas-tree.app`
+
+This allows the frontend application at that domain to access the API.
 
 ## Project Structure
 
@@ -174,48 +177,19 @@ src/
 ├── types.ts              # TypeScript interfaces
 ├── vectorUtils.ts        # Vector embedding utilities
 ├── routes/
-│   └── profanity.ts      # Profanity detection endpoint
-├── services/
-│   └── ProfanityService.ts  # Core detection logic
-└── scripts/
-    ├── seed/
-    │   ├── index.ts      # Main seeding script
-    │   ├── config.ts     # Configuration & sources
-    │   ├── types.ts      # Type definitions
-    │   ├── fetcher.ts    # Remote list fetching
-    │   ├── generator.ts  # Vector generation
-    │   └── logger.ts     # Logging utilities
-    └── upload/
-        └── index.ts      # Vector upload script
+│   ├── profanity.ts      # Profanity detection endpoint
+│   └── admin.ts          # Admin endpoints (e.g., seeding)
+└── services/
+    └── ProfanityService.ts  # Core detection logic
+helpers/
+├── config.ts             # Configuration for profanity word sources
+└── prepare-seed-data.ts  # Helper script to prepare seed data
 ```
-
-## Threshold Tuning
-
-The `threshold` parameter determines detection strictness:
-
-- **0.9-1.0**: Very strict - exact matches only
-- **0.8-0.9**: Strict - clear profanity
-- **0.7-0.8**: Moderate - includes variations
-- **0.6-0.7**: Lenient - may include false positives
-
-## Anti-Circumvention Features
-
-- **Text normalization**: Removes obfuscation characters
-- **Leet speak conversion**: `sh1t` → `shit`, `4ss` → `ass`
-- **Repeated character removal**: `shiiiiit` → `shit`
-- **Invisible character detection**: Detects zero-width unicode tricks
-- **Word variations**: Checks multiple variations of each word
-- **Concatenated profanity**: Detects hidden profanity in concatenated text
-
-## Supported Languages
-
-27 languages supported including: English, Dutch, German, French, Spanish, Italian, Portuguese, Russian, Ukrainian, Polish, Czech, Arabic, Japanese, Korean, Chinese, Hindi, Thai, Turkish, Swedish, Norwegian, Danish, Finnish, Hungarian, Filipino, Esperanto, and Persian.
 
 ## Notes
 
-- Current implementation uses a simple character-based embedding
-- For production, consider using a proper embedding model (e.g., OpenAI, Cohere)
-- Language sources can be extended in `src/scripts/seed/config.ts`
+- Embeddings are generated using the `@cf/baai/bge-small-en-v1.5` model from Cloudflare AI.
+- Language sources can be extended in `helpers/config.ts`.
 
 ## Type Generation
 
@@ -224,4 +198,3 @@ The `threshold` parameter determines detection strictness:
 ```txt
 yarn cf-typegen
 ```
-
