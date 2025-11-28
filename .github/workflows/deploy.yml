@@ -21,15 +21,7 @@ jobs:
       - name: Install dependencies
         run: yarn install --frozen-lockfile
       
-      - name: Generate vectors
-        run: yarn seed
-      
       - name: Deploy worker
         uses: cloudflare/wrangler-action@v3
         with:
-          wranglerVersion: '4.50.0'
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      
-      - name: Upload vectors via API
-        run: |
-          WORKER_URL="https://profanity.${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.workers.dev/api/admin/upload-vectors" UPLOAD_TOKEN="${{ secrets.UPLOAD_TOKEN }}" yarn upload
