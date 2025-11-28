@@ -43,7 +43,7 @@ export class ProfanityService {
         };
         return leetMap[match] || match;
       })
-      .replace(/(\w)\1+/g, '$1') // Remove repeated characters
+      .replace(/(\w)\1{2,}/g, '$1') // Remove repeated characters
       .replace(/\s+/g, ' ') // Normalize whitespace
       .trim();
 
@@ -120,10 +120,17 @@ export class ProfanityService {
     }
 
     // --- 1. Collect all chunks to be checked ---
+    const allChunks = new Set<string>();
+
+    // Add spaced-out words
+    const spacedOutWords = normalizedText.match(/\b(?:[a-zA-Z]\s)+[a-zA-Z]\b/g) || [];
+    spacedOutWords.forEach(word => {
+        allChunks.add(word.replace(/\s/g, ''));
+    });
+
     const words = tokenizeText(normalizedText);
     const semanticChunks = await semanticSplitter.splitText(normalizedText);
 
-    const allChunks = new Set<string>();
     words.forEach(word => {
         if (word.length > 1) {
             this.generateWordVariations(word).forEach(v => allChunks.add(v));
