@@ -1,47 +1,22 @@
-import type { VectorizeQueryResult } from './types';
+import type { VectorizeQueryResult, Env } from './types';
 
 /**
- * Generate a simple embedding from text using character-based vectorization
- * This is a basic implementation - in production you'd want to use a proper embedding model
+ * Generate an embedding from text using a proper embedding model
  */
-export function generateEmbedding(text: string, dimensions: number = 384): number[] {
-  const normalized = text.toLowerCase().trim();
-  const vector = new Array(dimensions).fill(0);
-  
-  // Create a deterministic vector based on character codes
-  for (let i = 0; i < normalized.length; i++) {
-    const charCode = normalized.charCodeAt(i);
-    const index = (charCode * (i + 1)) % dimensions;
-    vector[index] += Math.sin(charCode * (i + 1)) * 0.1;
+export async function generateEmbedding(text: string, ai: Env['AI']): Promise<number[]> {
+  if (!text) {
+    // Return a zero-vector for empty strings
+    return new Array(384).fill(0);
   }
-  
-  // Normalize the vector
-  const magnitude = Math.sqrt(vector.reduce((sum, val) => sum + val * val, 0));
-  return magnitude > 0 ? vector.map(v => v / magnitude) : vector;
-}
+  const embeddingsResponse = await ai.run('@cf/baai/bge-small-en-v1.5', {
+    text: [text],
+  });
 
-/**
- * Calculate cosine similarity between two vectors
- */
-export function cosineSimilarity(a: number[], b: number[]): number {
-  if (a.length !== b.length) return 0;
-  
-  let dotProduct = 0;
-  let magnitudeA = 0;
-  let magnitudeB = 0;
-  
-  for (let i = 0; i < a.length; i++) {
-    dotProduct += a[i] * b[i];
-    magnitudeA += a[i] * a[i];
-    magnitudeB += b[i] * b[i];
+  if (!embeddingsResponse.data || embeddingsResponse.data.length === 0) {
+      throw new Error('Failed to generate embeddings');
   }
-  
-  magnitudeA = Math.sqrt(magnitudeA);
-  magnitudeB = Math.sqrt(magnitudeB);
-  
-  if (magnitudeA === 0 || magnitudeB === 0) return 0;
-  
-  return dotProduct / (magnitudeA * magnitudeB);
+
+  return embeddingsResponse.data[0];
 }
 
 /**

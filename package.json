@@ -7,9 +7,7 @@
     "deploy:dry-run": "wrangler deploy --dry-run --outdir=dist",
     "build": "wrangler deploy --dry-run --outdir=dist",
     "cf-typegen": "wrangler types --env-interface CloudflareBindings",
-    "seed": "tsx src/scripts/seed/index.ts",
-    "upload": "tsx src/scripts/upload/index.ts",
-    "seed:upload": "tsx src/scripts/seed/index.ts && tsx src/scripts/upload/index.ts"
+    "prepare-seed": "tsx helpers/prepare-seed-data.ts"
   },
   "dependencies": {
     "hono": "^4.10.7"

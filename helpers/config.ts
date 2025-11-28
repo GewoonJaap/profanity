@@ -1,13 +1,4 @@
-/**
- * Configuration for profanity word sources
- */
-
-export interface ProfanitySource {
-  url: string;
-  language: string;
-}
-
-export const PROFANITY_SOURCES: ProfanitySource[] = [
+export const PROFANITY_SOURCES = [
   // English
   {
     url: 'https://raw.githubusercontent.com/coffee-and-fun/google-profanity-words/main/data/en.txt',
@@ -144,5 +135,4 @@ export const PROFANITY_SOURCES: ProfanitySource[] = [
   },
 ];
 
-export const OUTPUT_FILE = 'profanity-vectors.json';
-export const VECTORIZE_INDEX_NAME = 'profanity-index';
+export const OUTPUT_FILE = 'seed-payload.json';

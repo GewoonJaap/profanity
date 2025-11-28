@@ -122,7 +122,7 @@ export class ProfanityService {
 
       // Check all variations against vector store
       for (const variation of variations) {
-        const embedding = generateEmbedding(variation);
+        const embedding = await generateEmbedding(variation, this.env.AI);
         
         const results = await this.env.VECTORIZE.query(embedding, {
           topK: 1,
@@ -200,7 +200,7 @@ export class ProfanityService {
     for (let windowSize = 3; windowSize <= 8; windowSize++) {
       for (let i = 0; i <= cleanText.length - windowSize; i++) {
         const substring = cleanText.substring(i, i + windowSize);
-        const embedding = generateEmbedding(substring);
+        const embedding = await generateEmbedding(substring, this.env.AI);
         
         const results = await this.env.VECTORIZE.query(embedding, {
           topK: 1,
