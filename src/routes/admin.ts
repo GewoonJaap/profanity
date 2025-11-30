@@ -41,7 +41,7 @@ admin.post('/words', async (c) => {
     for (let i = 0; i < uniqueWords.length; i += AI_BATCH_SIZE) {
       const batchWords = uniqueWords.slice(i, i + AI_BATCH_SIZE);
       
-      const embeddingsResponse = await c.env.AI.run('@cf/baai/bge-small-en-v1.5', {
+      const embeddingsResponse = await c.env.AI.run('@cf/google/embeddinggemma-300m', {
         text: batchWords,
       });
 

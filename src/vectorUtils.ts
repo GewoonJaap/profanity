@@ -1,23 +1,4 @@
-import type { VectorizeQueryResult, Env } from './types';
-
-/**
- * Generate an embedding from text using a proper embedding model
- */
-export async function generateEmbedding(text: string, ai: Env['AI']): Promise<number[]> {
-  if (!text) {
-    // Return a zero-vector for empty strings
-    return new Array(384).fill(0);
-  }
-  const embeddingsResponse = await ai.run('@cf/baai/bge-small-en-v1.5', {
-    text: [text],
-  });
-
-  if (!embeddingsResponse.data || embeddingsResponse.data.length === 0) {
-      throw new Error('Failed to generate embeddings');
-  }
-
-  return embeddingsResponse.data[0];
-}
+import type { VectorizeQueryResult } from './types';
 
 /**
  * Tokenize text into words

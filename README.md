@@ -11,7 +11,7 @@ A profanity detector built with Hono, Cloudflare Workers and Vectorize.
 - ✅ Multi-language support (27 languages)
 - ✅ Advanced anti-circumvention detection
 - ✅ Cloudflare Workers for edge deployment
-- ✅ AI-powered embeddings using `@cf/baai/bge-small-en-v1.5`
+- ✅ AI-powered embeddings using `@cf/google/embeddinggemma-300m`
 
 ## Setup
 
@@ -46,7 +46,7 @@ wrangler secret put UPLOAD_TOKEN
 wrangler login
 
 # Create the Vectorize index
-wrangler vectorize create profanity-index --dimensions=384 --metric=cosine
+wrangler vectorize create profanity-index --dimensions=768 --metric=cosine
 
 # Verify the index was created
 wrangler vectorize list
@@ -163,11 +163,9 @@ Seed the vector database with a list of words. Requires Bearer token authenticat
 
 ## CORS Policy
 
-Cross-Origin Resource Sharing (CORS) is configured to allow requests from the following origin:
+Cross-Origin Resource Sharing (CORS) is configured to allow requests from any origin (`*`).
 
-- `profanity.christmas-tree.app`
-
-This allows the frontend application at that domain to access the API.
+This allows any frontend application to access the API.
 
 ## Project Structure
 
@@ -175,7 +173,6 @@ This allows the frontend application at that domain to access the API.
 src/
 ├── index.ts              # Main Hono app entry point
 ├── types.ts              # TypeScript interfaces
-├── vectorUtils.ts        # Vector embedding utilities
 ├── routes/
 │   ├── profanity.ts      # Profanity detection endpoint
 │   └── admin.ts          # Admin endpoints (e.g., seeding)
@@ -188,7 +185,7 @@ helpers/
 
 ## Notes
 
-- Embeddings are generated using the `@cf/baai/bge-small-en-v1.5` model from Cloudflare AI.
+- Embeddings are generated using the `@cf/google/embeddinggemma-300m` model from Cloudflare AI.
 - Language sources can be extended in `helpers/config.ts`.
 
 ## Type Generation

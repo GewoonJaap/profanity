@@ -6,7 +6,6 @@ import type {
   VectorizeQueryResult
 } from '../types';
 import {
-  generateEmbedding,
   tokenizeText,
   isProfaneMatch 
 } from '../vectorUtils';
@@ -85,7 +84,7 @@ export class ProfanityService {
 
     for (let i = 0; i < chunks.length; i += AI_BATCH_SIZE) {
       const batch = chunks.slice(i, i + AI_BATCH_SIZE);
-      const embeddingsResponse = await this.env.AI.run('@cf/baai/bge-small-en-v1.5', {
+      const embeddingsResponse = await this.env.AI.run('@cf/google/embeddinggemma-300m', {
         text: batch,
       });
 
